@@ -2,6 +2,13 @@ defmodule BloodyNeoN3 do
   @moduledoc """
   Documentation for `BloodyNeoN3`.
   """
+  alias BloodyNeoN3.VariableLengthInteger
+
+  @none 0
+  @called_by_entry 0x01
+  @custom_contracts 0x10
+  @custom_groups 0x20
+  @global 0x80
 
   def decode_block() do
   end
@@ -22,17 +29,55 @@ defmodule BloodyNeoN3 do
       netfee::signed-little-size(64), valid_until_block::unsigned-little-size(32),
       binary::binary>> = binary
 
+    {signers, binary} = decode_list(binary, &decode_signer/1)
+
     %{
       version: version,
       nonce: nonce,
       sysfee: sysfee,
       netfee: netfee,
-      valid_until_block: valid_until_block
-      # signers:,
+      valid_until_block: valid_until_block,
+      signers: signers
       # attributes:,
       # script:,
       # witnesses:,
     }
+  end
+
+  def decode_list(binary, fun) do
+    {n, binary} = VariableLengthInteger.deserialize(binary)
+    do_decode_list(binary, fun, n, [])
+  end
+
+  defp do_decode_list(binary, fun, 0, result), do: {Enum.reverse(result), binary}
+
+  defp do_decode_list(binary, fun, n, result) do
+    {data, binary} = fun.(binary)
+    do_decode_list(binary, fun, n - 1, [data | result])
+  end
+
+  def decode_signer(binary) do
+    <<account::unsigned-little-size(160), scopes::8, binary::binary>> = binary
+
+    if has_flag(scopes, @custom_contracts) do
+      raise "not support custom contracts"
+    end
+
+    if has_flag(scopes, @custom_groups) do
+      raise "not support custom groups"
+    end
+
+    {%{
+       account: account,
+       scopes: scopes
+     }, binary}
+  end
+
+  def has_flag(scopes, s) do
+    Bitwise.band(scopes, s) != 0
+  end
+
+  def decode_attribute() do
   end
 
   def encode_tx() do
