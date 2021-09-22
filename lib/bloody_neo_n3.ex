@@ -2,13 +2,13 @@ defmodule BloodyNeoN3 do
   @moduledoc """
   Documentation for `BloodyNeoN3`.
   """
-  alias BloodyNeoN3.VariableLengthInteger
+  alias BloodyNeoN3.{VariableLengthInteger, VariableLengthString}
 
-  @none 0
-  @called_by_entry 0x01
+  # @none 0
+  # @called_by_entry 0x01
   @custom_contracts 0x10
   @custom_groups 0x20
-  @global 0x80
+  # @global 0x80
 
   def decode_block() do
   end
@@ -30,6 +30,10 @@ defmodule BloodyNeoN3 do
       binary::binary>> = binary
 
     {signers, binary} = decode_list(binary, &decode_signer/1)
+    {attributes, binary} = decode_list(binary, &decode_attribute/1)
+
+    {script, binary} = VariableLengthString.deserialize(binary)
+    {witnesses, ""} = decode_list(binary, &decode_witness/1)
 
     %{
       version: version,
@@ -37,10 +41,10 @@ defmodule BloodyNeoN3 do
       sysfee: sysfee,
       netfee: netfee,
       valid_until_block: valid_until_block,
-      signers: signers
-      # attributes:,
-      # script:,
-      # witnesses:,
+      signers: signers,
+      attributes: attributes,
+      script: script,
+      witnesses: witnesses
     }
   end
 
@@ -54,6 +58,10 @@ defmodule BloodyNeoN3 do
   defp do_decode_list(binary, fun, n, result) do
     {data, binary} = fun.(binary)
     do_decode_list(binary, fun, n - 1, [data | result])
+  end
+
+  def encode_list(list, fun) do
+    VariableLengthInteger.serialize(length(list)) <> Enum.map_join(list, fun)
   end
 
   def decode_signer(binary) do
@@ -73,14 +81,45 @@ defmodule BloodyNeoN3 do
      }, binary}
   end
 
+  def encode_signer(data) do
+    <<data.account::unsigned-little-size(160), data.scopes::8>>
+  end
+
   def has_flag(scopes, s) do
     Bitwise.band(scopes, s) != 0
   end
 
-  def decode_attribute() do
+  def decode_attribute(_) do
+    raise "not support attributes"
   end
 
-  def encode_tx() do
+  def encode_attribute(_) do
+    raise "not support attributes"
+  end
+
+  def decode_witness(binary) do
+    {invocation, binary} = VariableLengthString.deserialize(binary)
+    {verification, binary} = VariableLengthString.deserialize(binary)
+    {%{invocation: invocation, verification: verification}, binary}
+  end
+
+  def encode_witness(data) do
+    VariableLengthString.serialize(data.invocation) <>
+      VariableLengthString.serialize(data.verification)
+  end
+
+  def encode_tx(tx) do
+    binary =
+      <<tx.version::8, tx.nonce::unsigned-little-size(32), tx.sysfee::signed-little-size(64),
+        tx.netfee::signed-little-size(64), tx.valid_until_block::unsigned-little-size(32)>>
+
+    IO.iodata_to_binary([
+      binary,
+      encode_list(tx.signers, &encode_signer/1),
+      encode_list(tx.attributes, &encode_attribute/1),
+      VariableLengthString.serialize(tx.script),
+      encode_list(tx.witnesses, &encode_witness/1)
+    ])
   end
 
   def sign_tx() do
